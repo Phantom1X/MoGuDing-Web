@@ -6,17 +6,11 @@ import pymysql
 pymysql.install_as_MySQLdb()
 
 class dbConfig(object):
-    # 上线数据库
-    # server = '47.101.38.190:3306'
-    # user = 'moguding'
-    # password = 'yfmPTJpHDWtSxsMM'
-    # database = 'moguding'
-
     # 测试环境数据库
-    server = '47.101.38.190:3306'
-    user = 'moguding-web'
-    password = 'Tm88wtk2pTSmmNDA'
-    database = 'moguding-web'
+    server = '' # 数据库连接地址
+    user = '' # 数据库用户名
+    password = '' # 数据库密码
+    database = '' # 数据库名称
     flaskConfig.app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://%s:%s@%s/%s?charset=utf8&autocommit=true' % (user, password, server, database)
     
     # 设置sqlalchemy自动跟踪数据库
