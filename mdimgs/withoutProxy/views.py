@@ -15,7 +15,7 @@ class API:
     """
         返回token值api
     """
-    def returnToken(phoneNumber, password, userAgent, proxies):
+    def returnToken(phoneNumber, password, userAgent):
         url = "https://api.moguding.net:9000/session/user/v1/login"
         flaskConfig.request_header.update(
             {"user-agent": userAgent}
@@ -28,7 +28,7 @@ class API:
             "uuid": ""
         }
 
-        response = requests.post(url=url, headers=flaskConfig.request_header, data=json.dumps(request_body), verify=False, proxies=proxies)
+        response = requests.post(url=url, headers=flaskConfig.request_header, data=json.dumps(request_body), verify=False)
         response = json.loads(response.text)
         mogudingAccount.query.filter_by(phoneNumber=phoneNumber).update({'token': response['data']['token']})
         db.session.commit()
@@ -100,60 +100,20 @@ class API:
     """
     @flaskConfig.app.route('/getPlanId', methods=['get', 'POST'])
     def returnPlanId():
+        url = "https://api.moguding.net:9000/practice/plan/v3/getPlanByStu"
         phoneNumber = request.form['phoneNumber']
 
-        print("开始获取代理")
-        proxies = {}
-        import time
-        while True:
-            proxyRequest = requests.get(flaskConfig.proxyApiUrl)
-            proxyContent = json.loads(proxyRequest.content)
-            ip = proxyContent["obj"][0]["ip"] + ":" + proxyContent["obj"][0]["port"]
-            print(proxyContent)
-            print(ip)
-
-            proxies = {"https": "https://" + ip}
-            print(proxies)
-
-            testUrl = "https://api.moguding.net:9000/session/user/v1/login"
-            req = requests.post(testUrl, verify=False, timeout=5, proxies=proxies)
-            text = req.json()
-            if text["code"] == 500:
-                break
-            else:
-                print("代理IP: {}，无效，继续尝试!".format(proxyContent["obj"][0]["ip"] + ":" + proxyContent["obj"][0]["port"]))
-                time.sleep(1)
-                continue
-
         account = mogudingAccount.query.filter_by(phoneNumber=phoneNumber).first()
-        # userId, token = API.returnToken(phoneNumber=account.phoneNumber, password=account.password, userAgent=account.userAgent, proxies=proxies)
-        # mogudingAccount.query.filter_by(phoneNumber=phoneNumber).update({'token': token})
-        # db.session.commit()
-
-        url = "https://api.moguding.net:9000/session/user/v1/login"
-        flaskConfig.request_header.update(
-            {"user-agent": account.userAgent}
-        )
-
-        request_body = {
-            "phone": account.phoneNumber,
-            "password": account.password,
-            "loginType": "android",
-            "uuid": ""
-        }
-
-        response = requests.post(url=url, headers=flaskConfig.request_header, data=json.dumps(request_body), verify=False, proxies=proxies)
-        response = json.loads(response.text)
-        mogudingAccount.query.filter_by(phoneNumber=phoneNumber).update({'token': response['data']['token']})
+        userId, token = API.returnToken(phoneNumber=account.phoneNumber, password=account.password, userAgent=account.userAgent)
+        mogudingAccount.query.filter_by(phoneNumber=phoneNumber).update({'token': token})
         db.session.commit()
 
         flaskConfig.request_header.update(
-            {"Authorization": response['data']['token'], "roleKey": "student", "sign": API.returnSign(userId=response['data']['userId'])}
+            {"Authorization": token, "roleKey": "student", "sign": API.returnSign(userId=userId)}
         )
         data = {"state": ""}
 
-        url = "https://api.moguding.net:9000/practice/plan/v3/getPlanByStu"
-        response = requests.post(url, headers=flaskConfig.request_header, data=json.dumps(data), verify=False, proxies=proxies)
+        response = requests.post(url, headers=flaskConfig.request_header, data=json.dumps(data), verify=False)
         response = json.loads(response.text)
         print(response)
         planList = {
@@ -313,30 +273,7 @@ class viewFunctions:
                 if userAgent == "":
                     userAgent = flaskConfig.userAgents[random.randint(0, len(flaskConfig.userAgents) - 1)]
                 
-                print("开始获取代理")
-                proxies = {}
-                import time
-                while True:
-                    proxyRequest = requests.get(flaskConfig.proxyApiUrl)
-                    proxyContent = json.loads(proxyRequest.content)
-                    ip = proxyContent["obj"][0]["ip"] + ":" + proxyContent["obj"][0]["port"]
-                    print(proxyContent)
-                    print(ip)
-
-                    proxies = {"https": "https://" + ip}
-                    print(proxies)
-
-                    testUrl = "https://api.moguding.net:9000/session/user/v1/login"
-                    req = requests.post(testUrl, verify=False, timeout=5, proxies=proxies)
-                    text = req.json()
-                    if text["code"] == 500:
-                        break
-                    else:
-                        print("代理IP: {}，无效，继续尝试!".format(proxyContent["obj"][0]["ip"] + ":" + proxyContent["obj"][0]["port"]))
-                        time.sleep(1)
-                        continue
-
-                userId, token = API.returnToken(phoneNumber=phoneNumber, password=password, userAgent=userAgent, proxies=proxies)
+                userId, token = API.returnToken(phoneNumber=phoneNumber, password=password, userAgent=userAgent)
                 if token == "error":
                     token = "获取token出错，请检查账户信息，并删除账户重新尝试!"
 
@@ -348,12 +285,9 @@ class viewFunctions:
                 return render_template('accountManage.html', title="账户管理 - {}".format(flaskConfig.websiteName), username=session['username'],
                                         alert=alert, accountQuery=accountQuery)
         else:
-            if session.get('email') == None:
-                return redirect('/login')
-            else:
-                accountQuery = mogudingAccount.query.filter_by(owner=session['email']).all()
-                return render_template('accountManage.html', title="账户管理 - {}".format(flaskConfig.websiteName), username=session['username'],
-                                        accountQuery=accountQuery)
+            accountQuery = mogudingAccount.query.filter_by(owner=session['email']).all()
+            return render_template('accountManage.html', title="账户管理 - {}".format(flaskConfig.websiteName), username=session['username'],
+                                    accountQuery=accountQuery)
     
     """
         地址管理
@@ -379,13 +313,10 @@ class viewFunctions:
             return render_template('addressManage.html', title="地址管理 - {}".format(flaskConfig.websiteName), username=session['username'],
                                     addressQuery=addressQuery)
         else:
-            if session.get('email') == None:
-                return redirect('/login')
-            else:
-                accountQuery = mogudingAccount.query.filter_by(owner=session['email']).all()
-                addressQuery = mogudingAddress.query.filter_by(owner=session['email']).all()
-                return render_template('addressManage.html', title="地址管理 - {}".format(flaskConfig.websiteName), username=session['username'],
-                                        addressQuery=addressQuery, accountQuery=accountQuery)
+            accountQuery = mogudingAccount.query.filter_by(owner=session['email']).all()
+            addressQuery = mogudingAddress.query.filter_by(owner=session['email']).all()
+            return render_template('addressManage.html', title="地址管理 - {}".format(flaskConfig.websiteName), username=session['username'],
+                                    addressQuery=addressQuery, accountQuery=accountQuery)
 
     """
         任务管理
@@ -421,25 +352,19 @@ class viewFunctions:
             return render_template('tasksManage.html', title="任务管理 - {}".format(flaskConfig.websiteName), username=session['username'],
                                     tasksQuery=tasksQuery, accountQuery=accountQuery)
         else:
-            if session.get('email') == None:
-                return redirect('/login')
-            else:
-                accountQuery = mogudingAccount.query.filter_by(owner=session['email']).all()
-                tasksQuery = mogudingTasks.query.filter_by(owner=session['email']).all()
-                return render_template('tasksManage.html', title="任务管理 - {}".format(flaskConfig.websiteName), username=session['username'],
-                                        tasksQuery=tasksQuery, accountQuery=accountQuery)
+            accountQuery = mogudingAccount.query.filter_by(owner=session['email']).all()
+            tasksQuery = mogudingTasks.query.filter_by(owner=session['email']).all()
+            return render_template('tasksManage.html', title="任务管理 - {}".format(flaskConfig.websiteName), username=session['username'],
+                                    tasksQuery=tasksQuery, accountQuery=accountQuery)
 
     """
         任务日志页面
     """
     @flaskConfig.app.route('/taskLogs')
     def taskLogs():
-        if session.get('email') == None:
-            return redirect('/login')
-        else:
-            logs = mogudingLogs.query.filter_by(owner=session['email']).all()
-            return render_template('taskLogs.html', title="任务日志 - {}".format(flaskConfig.websiteName), username=session['username'],
-                                    logs=logs)
+        logs = mogudingLogs.query.filter_by(owner=session['email']).all()
+        return render_template('taskLogs.html', title="任务日志 - {}".format(flaskConfig.websiteName), username=session['username'],
+                                logs=logs)
     
     """
         推送管理页面
@@ -459,13 +384,10 @@ class viewFunctions:
             return render_template('sendManage.html', title="推送管理 - {}".format(flaskConfig.websiteName), username=session['username'],
                                 accountQuery=accountQuery, sendTaskQuery=sendTaskQuery)
         else:
-            if session.get('email') == None:
-                return redirect('/login')
-            else:
-                accountQuery = mogudingAccount.query.filter_by(owner=session['email']).all()
-                sendTaskQuery = mogudingTaskSend.query.filter_by(owner=session['email']).all()
-                return render_template('sendManage.html', title="推送管理 - {}".format(flaskConfig.websiteName), username=session['username'],
-                                    accountQuery=accountQuery, sendTaskQuery=sendTaskQuery)
+            accountQuery = mogudingAccount.query.filter_by(owner=session['email']).all()
+            sendTaskQuery = mogudingTaskSend.query.filter_by(owner=session['email']).all()
+            return render_template('sendManage.html', title="推送管理 - {}".format(flaskConfig.websiteName), username=session['username'],
+                                accountQuery=accountQuery, sendTaskQuery=sendTaskQuery)
 
     """
         手动执行任务
@@ -485,10 +407,7 @@ class viewFunctions:
     """
     @flaskConfig.app.route('/donation')
     def donation():
-        if session.get('email') == None:
-            return redirect('/login')
-        else:
-            return render_template('donation.html', title="捐赠! - {}".format(flaskConfig.websiteName)), 404
+        return render_template('donation.html', title="捐赠! - {}".format(flaskConfig.websiteName)), 404
 
     """
         404

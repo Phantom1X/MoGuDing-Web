@@ -5,10 +5,10 @@ from config import flaskConfig
 import datetime
 import requests
 import json
+import time
 
 class cronCheckMethod:
     def CHECK(taskId):
-        import time
         begin_time = time.time()
         url = "https://api.moguding.net:9000/attendence/clock/v2/save"
         salt = "3478cbbc33f84bd00d75d7dfa69e0daa"
@@ -50,27 +50,8 @@ class cronCheckMethod:
             "phone": phoneNumber
         }
 
-        print("开始获取代理")
-        proxies = {}
-        import time
-        while True:
-            proxyRequest = requests.get(flaskConfig.proxyApiUrl)
-            proxyContent = json.loads(proxyRequest.content)
-            ip = proxyContent["obj"][0]["ip"] + ":" + proxyContent["obj"][0]["port"]
-            print(proxyContent, ip)
-
-            proxies = {"https": "https://" + proxyContent["obj"][0]["ip"] + ":" + proxyContent["obj"][0]["port"]}
-            print(proxies)
-
-            req = requests.post(url=url, headers=flaskConfig.request_header, data=json.dumps(data), verify=False, proxies=proxies)
-            text = req.json()
-            if text["code"] == 200:
-                break
-            else:
-                print("代理IP: {}，无效，继续尝试!".format(proxyContent["obj"][0]["ip"] + ":" + proxyContent["obj"][0]["port"]))
-                time.sleep(1)
-                continue
-
+        req = requests.post(url, data=json.dumps(data), headers=headers, verify=False, timeout=5)
+        text = req.json()
         print(text)
         token = json.loads(req.text)['data']['token']
         userId = json.loads(req.text)['data']['userId']
@@ -92,7 +73,7 @@ class cronCheckMethod:
         headers["sign"] = API.GenerateSign("Android" + taskType + planId + userId + address + salt)
 
         saveUrl = "https://api.moguding.net:9000/attendence/clock/v2/save"
-        response = requests.post(saveUrl, data=json.dumps(body), headers=headers, verify=False, timeout=20, proxies=proxies)
+        response = requests.post(saveUrl, data=json.dumps(body), headers=headers, verify=False, timeout=20)
         response = json.loads(response.text)
         print(response)
         end_time = time.time()
